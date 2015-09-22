@@ -16,7 +16,7 @@ class OG(object):
          self.sigma,
          self.Pi,
          self.e_jt) = household_params
-        self.beta = beta_annual**(80/self.S)
+        self.beta = self.beta_annual**(80/self.S)
         nvec = np.ones(S)
         nvec[2*S/3:] = nvec[2*S/3:]*.3
         self.nvec = nvec
@@ -25,7 +25,7 @@ class OG(object):
         (self.A,
          self.alpha,
          self.delta_annual) = firm_params
-        self.delta = 1-(1-delta_annual)**(80/self.S)
+        self.delta = 1-(1-self.delta_annual)**(80/self.S)
     
     def get_lambda_bar(self, Pi):
         """Compute the ergodic distribution of the Markox chain."""
@@ -38,18 +38,20 @@ class OG(object):
     def initialize_state(self):
         """Initialize a random starting state."""
         S0 = np.random.multinomial(self.N, np.ones(self.S)/float(self.S))
-        e0 = np.array([np.random.multinomial(s, lambda_bar) for s in S0])
-        b0 = [list(np.random.rand(e)) for e in e0[1:].ravel()]
-        b0 = [[0],[0]]+b0
+        e0 = np.array([np.random.multinomial(s, self.lambda_bar) for s in S0])
+        b0 = np.zeros_like(e0, dtype="object")
+        b0[0] = np.array([tuple([0]*e) for e in e0[0]])
+        b0[1:] = np.array([tuple(np.random.rand(e)*15) for e in e0[1:].ravel()]).reshape(S-1,J)
         self.state = b0
+        self.S = S0
         
     def get_r_and_w(self, percent=False):
         """Calculate r and w at the current state."""
         if percent:
-            K = self.state.sum()/self.N
+            K = sum(list(self.state.sum()))/self.N
         else:
-            K = self.state.sum()
-        L = self.nvec.sum()
+            K = sum(list(self.state.sum()))
+        L = (self.nvec*self.S).sum()
         r = self.alpha*self.A*(L/K)**(1-self.alpha)-self.delta
         w = (1-self.alpha)*self.A*(K/L)**self.alpha
         return r, w
@@ -58,9 +60,17 @@ class OG(object):
         """Compute the euler errors."""
         
         
-    def update_state(self):
-        """Solve the individual lifetime problems."""
-        b = fsolve(get_euler_errors)
+#     def update_state(self):
+#         """Solve the individual lifetime problems."""
+#         for row in self.state:
+#             for column in row:
+                
+#             # For s=S-1
+#             c0 = w*e_jt+(1+r)*
+#             new_state.append()
+#             # For s=S don't do anything
+#             new_state.append()
+#         b = fsolve(get_euler_errors)
         
     def SS(self, SS_params):
         """Find the steady state."""
@@ -74,15 +84,13 @@ class OG(object):
             
             
 # Define the Household parameters
-N = 100000
-S = 80
+N = 100
+S = 3
 J = 2
 beta_annual = .96
 sigma = 3.0
 Pi = np.array([[0.6, 0.4],
                [0.4, 0.6]])
-
-# lambda_bar = get_lambda_bar(Pi)
 e_jt = np.array([0.8, 1.2])
 
 # S = 4
@@ -95,8 +103,6 @@ e_jt = np.array([0.8, 1.2])
 #                [0.10,0.14,0.18,0.24,0.30,0.40,0.30],
 #                [0.06,0.10,0.14,0.18,0.24,0.30,0.40]])
 # Pi = (Pi.T/Pi.sum(1)).T
-
-# lambda_bar = get_lambda_bar(Pi)
 # e_jt = np.array([0.6, 0.8, 1.0, 1.3, 1.6, 2.0, 2.5])
 
 household_params = (N, S, J, beta_annual, sigma, Pi, e_jt)
@@ -109,7 +115,3 @@ delta_annual = .05
 firm_params = (A, alpha, delta_annual)
 
 # SS parameters
-b_guess = np.ones((S, J))*.0001
-b_guess[0] = np.zeros(J)
-SS_tol = 1e-10
-rho = .5
