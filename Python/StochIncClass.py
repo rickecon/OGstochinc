@@ -30,9 +30,6 @@ class OG(object):
          self.delta_annual) = firm_params
 
         self.delta = 1-(1-delta_annual)**(80/self.S)
-        self.initialize_b_vec()
-        self.get_r_and_w()
-        #self.get_c()
 
     
 
@@ -41,7 +38,9 @@ class OG(object):
         Here is some kind of function that sets all values, after
         parameters are all set
         '''
-        pass
+        self.initialize_b_vec()
+        self.get_r_and_w()
+        #self.get_c()
 
 
     def get_lambda_bar(self):
