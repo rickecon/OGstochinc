@@ -2,6 +2,8 @@ import time
 
 import numpy as np
 from scipy.optimize import fsolve
+from scipy.special import beta
+import gb2library
 
 class OG(object):
     '''
@@ -14,8 +16,6 @@ class OG(object):
         self.sigma - 
         self.Pi - (SxJ) array, Markov probability matrix
         self.e_jt - 
-        self.mean -
-        self.std - 
         self.nvec
         self.lambda_bar - (J) array, ergodic distribution of SS ability
         self.alpha -
@@ -35,8 +35,7 @@ class OG(object):
          self.sigma,
          self.Pi,
          self.e_jt,
-         self.mean,
-         self.std) = household_params
+         self.dist_params) = household_params
         self.beta = self.beta_annual**(80/self.S)
 
         nvec = np.ones(S)
@@ -53,6 +52,7 @@ class OG(object):
 
     def set_state(self):
         """Set initial state and r and w."""
+        self.get_mean_GB2()
         self.initialize_b_vec()
         #self.get_r_and_w()
         #self.get_c()
@@ -73,9 +73,17 @@ class OG(object):
         self.b_vec = [np.exp(self.std*np.random.randn(S,round(b))+
             self.mean) for b in self.lambda_bar*self.N/self.S]
         '''
-        self.b_vec = np.exp(self.std*np.random.gamma(self.S,self.J,max(self.lambda_bar)*
-            self.N/self.S)+self.mean)
-        self.params_vec 
+        self.b_vec = np.random.gamma(self.S,self.J,np.max(self.lambda_bar)*
+            self.N/self.S)
+
+
+    def get_mean_GB2(self):
+        '''
+        calculates the mean for a GB2 distribution
+        '''
+        a,b,p,q = self.dist_params
+        self.mean = (b*beta(p+(1/p),q-(1/p)))/(beta(p,q))
+
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
@@ -96,6 +104,7 @@ Pi = np.array([[0.1, 0.9],
 std = .5
 mean = 0
 
+dist_params_init = np.array([1, 500, .5, 1000])
 # lambda_bar = get_lambda_bar(Pi)
 e_jt = np.array([0.8, 1.2])
 
@@ -113,7 +122,7 @@ e_jt = np.array([0.8, 1.2])
 # lambda_bar = get_lambda_bar(Pi)
 # e_jt = np.array([0.6, 0.8, 1.0, 1.3, 1.6, 2.0, 2.5])
 
-household_params = (N, S, J, beta_annual, sigma, Pi, e_jt, mean, std)
+household_params = (N, S, J, beta_annual, sigma, Pi, e_jt, dist_params_init)
 
 # Firm parameters
 A = 1.0
@@ -129,5 +138,3 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-
-
