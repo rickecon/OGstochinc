@@ -4,6 +4,28 @@ import numpy as np
 from scipy.optimize import fsolve
 
 class OG(object):
+    '''
+    Overlapping generations object
+    Attributes:
+        self.N - Int, Number of unique agents in model (100,000)
+        self.S - Int, Number of years agent live (80)
+        self.J - Int, Number of ability types
+        self.beta_annual - Float, Annual discount rate
+        self.sigma - 
+        self.Pi - (SxJ) array, Markov probability matrix
+        self.e_jt - 
+        self.mean -
+        self.std - 
+        self.nvec
+        self.lambda_bar - (J) array, ergodic distribution of SS ability
+        self.alpha -
+        self.delta_annual
+        self.delta
+
+    Methods:
+        set_state:
+
+    '''
     def __init__(self, household_params, firm_params):
         """Instatiate the state parameters of the OG model."""
         (self.N,
@@ -26,12 +48,13 @@ class OG(object):
          self.alpha,
          self.delta_annual) = firm_params
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
+        self.set_state()
     
 
     def set_state(self):
         """Set initial state and r and w."""
         self.initialize_b_vec()
-        self.get_r_and_w()
+        #self.get_r_and_w()
         #self.get_c()
 
 
@@ -46,10 +69,13 @@ class OG(object):
 
     def initialize_b_vec(self):
         """Initialize a random starting state."""
-        N = int(np.sum(100*S*lambda_bar))
-        [np.exp(self.std*np.random.randn(S,round(b)))+self.mean
-         for b in self.lambda_bar*self.N/self.S]
-        
+        '''
+        self.b_vec = [np.exp(self.std*np.random.randn(S,round(b))+
+            self.mean) for b in self.lambda_bar*self.N/self.S]
+        '''
+        self.b_vec = np.exp(self.std*np.random.gamma(self.S,self.J,max(self.lambda_bar)*
+            self.N/self.S)+self.mean)
+        self.params_vec 
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
@@ -58,103 +84,6 @@ class OG(object):
         self.r = self.alpha*self.A*(L/K)**(1-self.alpha)-self.delta
         self.w = (1-self.alpha)*self.A*(K/L)**self.alpha
 
-#    def __init__(self, household_params, firm_params):
-#        """Instatiate the state parameters of the OG model."""
-#        (self.N,
-#         self.S,
-#         self.J,
-#         self.beta_annual,
-#         self.sigma,
-#         self.Pi,
-#         self.e_jt) = household_params
-#        self.beta = beta_annual**(80/self.S)
-#        self.Pi = self.Pi.T
-#
-#        #Set labor exogenously
-#        nvec = np.ones(S)
-#        nvec[2*S/3:] = nvec[2*S/3:]*.3
-#        self.nvec = nvec
-#        self.lambda_bar = self.get_lambda_bar()
-#
-#        (self.A,
-#         self.alpha,
-#         self.delta_annual) = firm_params
-#
-#        self.delta = 1-(1-delta_annual)**(80/self.S)
-#
-#        self.set_state()
-#
-#    
-#
-#    def set_state(self):
-#        '''
-#        Here is some kind of function that sets all values, after
-#        parameters are all set
-#        '''
-#        self.initialize_b_vec()
-#        self.get_r_and_w()
-#        #self.get_c()
-#
-#
-#    def get_lambda_bar(self):
-#        """Compute the ergodic distribution of the Markox chain."""
-#        w, vr = np.linalg.eig(self.Pi)
-#        lambda_bar = vr[:,np.isclose(w,1.0)]
-#        lambda_bar /= sum(lambda_bar)
-#        lambda_bar = lambda_bar.flatten()
-#        return lambda_bar
-#    
-#    def initialize_b_vec(self):
-#        """Initialize a random starting state."""
-#        e0 = np.ones((self.S,self.J))*float(self.N)/(self.S*self.J)
-#        print e0
-#
-#
-#    def get_r_and_w(self, percent=False):
-#        """Calculate r and w at the current state."""
-#        if percent:
-#            self.K = sum(self.b)
-#        else:
-#            self.K = np.array(self.b.sum()).sum()
-#        self.L = sum(self.nvec)
-#        self.r = self.alpha*self.A*(self.L/self.K)**(1-self.alpha)-self.delta
-#        self.w = (1-self.alpha)*self.A*(self.K/self.L)**self.alpha
-#        
-#    def get_euler_errors(self, b):
-#        """Compute the euler errors."""
-#        
-#        
-#    def update_state(self):
-#        """Solve the individual lifetime problems."""
-#        self.b = fsolve(get_euler_errors)
-#        
-#    def SS(self, SS_params):
-#        """Find the steady state."""
-#        tol = SS_params
-#        diff = 1
-#        while diff<tol:
-#            current_state = self.state
-#            self.update_state()
-#            diff = np.linalg.norm(current_state-self.state)
-#
-#    def _calc_u(self):
-#        """
-#        Calculates the utility, given consumption
-#        """
-#        utility = (self.c**(1-self.sigma)-1)/(1-self.sigma)
-#        return utility
-#
-#    def get_c(self):
-#        '''
-#        Returns S length Consumption vector
-#        '''
-#        r, w = self.r, self.w
-#        b = np.copy(self.b)
-#
-#        b_s = np.vstack(np.zeros((1,J), b))
-#        b_sp1 = np.append(b, np.zeros((1,J)))
-#        self.c = ((1 + r) * b_s + w * nvec - b_sp1)
-#        self.c_cstr = cvec <= 0
 
 # Define the Household parameters
 N = 800
