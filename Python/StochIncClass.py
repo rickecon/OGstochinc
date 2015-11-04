@@ -33,8 +33,7 @@ class OG(object):
          self.beta_annual,
          self.sigma,
          self.Pi,
-         self.e_jt,
-         self.dist_params) = household_params
+         self.e_jt) = household_params
         self.beta = self.beta_annual**(80/self.S)
 
         nvec = np.ones(S)
@@ -51,9 +50,8 @@ class OG(object):
 
     def set_state(self):
         """Set initial state and r and w."""
-        self.get_mean_GB2()
         self.initialize_b_vec()
-        #self.get_r_and_w()
+        self.get_r_and_w()
         #self.get_c()
 
 
@@ -68,29 +66,14 @@ class OG(object):
 
     def initialize_b_vec(self):
         """Initialize a random starting state."""
-        '''
-        self.b_vec = [np.exp(self.std*np.random.randn(S,round(b))+
-            self.mean) for b in self.lambda_bar*self.N/self.S]
-        '''
         self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
             np.max(self.lambda_bar)*(self.N/self.S*self.J)))
 
 
 
-    def get_mean_GB2(self):
-        '''
-        calculates the mean for a GB2 distribution
-        '''
-        a,b,p,q = self.dist_params
-        self.mean = (b*beta(p+(1/p),q-(1/p)))/(beta(p,q))
-
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
-        self.K = sum(list(self.state.sum()))
-        self.L = (self.nvec*self.S).sum()
-        self.r = self.alpha*self.A*(L/K)**(1-self.alpha)-self.delta
-        self.w = (1-self.alpha)*self.A*(K/L)**self.alpha
 
 
 # Define the Household parameters
@@ -104,9 +87,9 @@ Pi = np.array([[0.1, 0.9],
 std = .5
 mean = 0
 
-dist_params_init = np.array([1, 500, .5, 1000])
-# lambda_bar = get_lambda_bar(Pi)
 e_jt = np.array([0.8, 1.2])
+mean = 0.0
+std = 0.5
 
 # S = 4
 # J = 7
@@ -118,11 +101,9 @@ e_jt = np.array([0.8, 1.2])
 #                [0.10,0.14,0.18,0.24,0.30,0.40,0.30],
 #                [0.06,0.10,0.14,0.18,0.24,0.30,0.40]])
 # Pi = (Pi.T/Pi.sum(1)).T
-
-# lambda_bar = get_lambda_bar(Pi)
 # e_jt = np.array([0.6, 0.8, 1.0, 1.3, 1.6, 2.0, 2.5])
 
-household_params = (N, S, J, beta_annual, sigma, Pi, e_jt, dist_params_init)
+household_params = (N, S, J, beta_annual, sigma, Pi, e_jt)
 
 # Firm parameters
 A = 1.0
