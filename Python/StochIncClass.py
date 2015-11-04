@@ -1,12 +1,30 @@
 import time
-
 import numpy as np
 from scipy.optimize import fsolve
+from scipy.special import beta
+import gb2library
 
 class OG(object):
-    """
-    
-    """
+    '''
+    Overlapping generations object
+    Attributes:
+        self.N - Int, Number of unique agents in model (100,000)
+        self.S - Int, Number of years agent live (80)
+        self.J - Int, Number of ability types
+        self.beta_annual - Float, Annual discount rate
+        self.sigma - 
+        self.Pi - (SxJ) array, Markov probability matrix
+        self.e_jt - 
+        self.nvec
+        self.lambda_bar - (J) array, ergodic distribution of SS ability
+        self.alpha -
+        self.delta_annual
+        self.delta
+
+    Methods:
+        set_state:
+
+    '''
     def __init__(self, household_params, firm_params):
         """Instatiate the state parameters of the OG model."""
         (self.N,
@@ -15,9 +33,7 @@ class OG(object):
          self.beta_annual,
          self.sigma,
          self.Pi,
-         self.e_jt,
-         self.mean,
-         self.std) = household_params
+         self.e_jt) = household_params
         self.beta = self.beta_annual**(80/self.S)
 
         nvec = np.ones(S)
@@ -29,6 +45,7 @@ class OG(object):
          self.alpha,
          self.delta_annual) = firm_params
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
+        self.set_state()
     
 
     def set_state(self):
@@ -49,29 +66,27 @@ class OG(object):
 
     def initialize_b_vec(self):
         """Initialize a random starting state."""
-        N = int(np.sum(100*S*lambda_bar))
-        [np.exp(self.std*np.random.randn(S,round(b)))+self.mean
-         for b in self.lambda_bar*self.N/self.S]
-        
+        self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
+            np.max(self.lambda_bar)*(self.N/self.S*self.J)))
+
+
+
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
-        K = sum(list(self.state.sum()))
-        L = (self.nvec*self.S).sum()
-        r = self.alpha*self.A*(L/K)**(1-self.alpha)-self.delta
-        w = (1-self.alpha)*self.A*(K/L)**self.alpha
-        return r, w
-            
-            
-            
+
+
 # Define the Household parameters
-N = 100
-S = 3
+N = 200000
+S = 80
 J = 2
 beta_annual = .96
 sigma = 3.0
-Pi = np.array([[0.6, 0.4],
-               [0.4, 0.6]])
+Pi = np.array([[0.1, 0.9],
+               [0.6, 0.4]])
+std = .5
+mean = 0
+
 e_jt = np.array([0.8, 1.2])
 mean = 0.0
 std = 0.5
@@ -88,16 +103,20 @@ std = 0.5
 # Pi = (Pi.T/Pi.sum(1)).T
 # e_jt = np.array([0.6, 0.8, 1.0, 1.3, 1.6, 2.0, 2.5])
 
-household_params = (N, S, J, beta_annual, sigma, Pi, e_jt, mean, std)
+household_params = (N, S, J, beta_annual, sigma, Pi, e_jt)
 
 # Firm parameters
 A = 1.0
 alpha = .35
 delta_annual = .05
-
 firm_params = (A, alpha, delta_annual)
 
 # SS parameters
+b_guess = np.ones((S, J))*.0001
+b_guess[0] = np.zeros(J)
+SS_tol = 1e-10
+rho = .5
 
+#calculation
 og = OG(household_params, firm_params)
-
+print og.b_vec.shape
