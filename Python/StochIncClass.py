@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 from scipy.optimize import fsolve
 from scipy.special import beta
@@ -73,8 +72,9 @@ class OG(object):
         self.b_vec = [np.exp(self.std*np.random.randn(S,round(b))+
             self.mean) for b in self.lambda_bar*self.N/self.S]
         '''
-        self.b_vec = np.random.gamma(self.S,self.J,np.max(self.lambda_bar)*
-            self.N/self.S)
+        self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
+            np.max(self.lambda_bar)*(self.N/self.S*self.J)))
+
 
 
     def get_mean_GB2(self):
@@ -94,13 +94,13 @@ class OG(object):
 
 
 # Define the Household parameters
-N = 800
+N = 200000
 S = 80
 J = 2
 beta_annual = .96
 sigma = 3.0
 Pi = np.array([[0.1, 0.9],
-               [0.1, 0.9]])
+               [0.6, 0.4]])
 std = .5
 mean = 0
 
@@ -138,3 +138,4 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
+print og.b_vec.shape
