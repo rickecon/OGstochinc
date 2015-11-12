@@ -100,4 +100,10 @@ firm_params = (A, alpha, delta_annual)
 # SS parameters
 
 og = OG(household_params, firm_params)
+og.SS()
+
+og.K
+og.TPI
+
+
 
