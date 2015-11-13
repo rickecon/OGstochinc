@@ -1,8 +1,8 @@
 import time
 import numpy as np
 from scipy.optimize import fsolve
-from scipy.special import beta
 import gb2library
+from scipy.interpolate import InterpolatedUnivariateSpline
 
 class OG(object):
     '''
@@ -26,7 +26,7 @@ class OG(object):
 
     '''
     def __init__(self, household_params, firm_params):
-        """Instatiate the state parameters of the OG model."""
+        """Instantiate the state parameters of the OG model."""
         (self.N,
          self.S,
          self.J,
@@ -65,7 +65,7 @@ class OG(object):
         return lambda_bar
     
 
-    def initialize_b_vec(self):
+    def initialize_bvec(self):
         """Initialize a random starting state."""
         self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
             np.max(self.lambda_bar)*(self.N/self.S*self.J)))
@@ -109,6 +109,24 @@ class OG(object):
         return eul_err
 
             
+    def update(self):
+        """Update bvec to the next period."""
+        bvec_new = np.ones_like(self.bvec)*999
+        phi = [None]*self.J
+        for s in xrange(self.S-1, 0, -1):
+            for j in xrange(self.J):
+                phi_j = phi[j]
+                b_s = self.bvec[s,j]
+                mask = b_s<999
+                b_s = b_s[mask]
+                #TODO Make this draw from previous distribution for guess
+                guess = b_s/2.
+                b_s1 = fsolve(eul_err, guess, args=(b_s, phi_j, j))
+                phi[j] = InterpolatedUnivariateSpline(b_s, b_s1)
+                bvec_new[s+1,j][mask] = b_s1
+        self.bvec = self.randomize(bvec_new)
+
+
 # Define the Household parameters
 N = 200000
 S = 80
