@@ -45,14 +45,15 @@ class OG(object):
          self.alpha,
          self.delta_annual) = firm_params
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
+        self.initialize_b_vec()
         self.set_state()
     
 
     def set_state(self):
         """Set initial state and r and w."""
-        self.initialize_b_vec()
+        self.L = self.nvec.sum() * self.N
+        self.K = self.b_vec.sum()
         self.get_r_and_w()
-        #self.get_c()
 
 
     def get_lambda_bar(self, Pi):
@@ -68,14 +69,38 @@ class OG(object):
         """Initialize a random starting state."""
         self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
             np.max(self.lambda_bar)*(self.N/self.S*self.J)))
-
-
-
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
+        A, alpha, delta, L, K = self.A, self.alpha, self.delta, self.L, self.K
+        self.r = alpha * A * ((L/K)**(1-alpha)) - delta
+        self.w = (1-alpha)*A*((K/L)**alpha)
+
+    def solve_age_layer(self, s):
+        '''Solves the s layer problem'''
 
 
+
+    def u_prime(self, consump):
+        return consump**(-sigma)
+
+
+    def exp_u(self, consump, s):
+        '''returns the expected utility, given consumption'''
+        beta, r, pi = self.beta, self.r, self.Pi
+        eu = 0.
+        for j in xrange(self.J):
+            eu += pi[j]*u_prime(calc_consump(b,self.S,j)
+
+    def calc_consump(self, savings, age, ability):
+        '''
+        '''
+        if age == self.S:
+            consump = (1+self.r)*savings+self.e_jt[ability]*n_vec[age]*self.wage
+        else:
+            consump = 9999.
+        return consump
+            
 # Define the Household parameters
 N = 200000
 S = 80
@@ -84,9 +109,6 @@ beta_annual = .96
 sigma = 3.0
 Pi = np.array([[0.1, 0.9],
                [0.6, 0.4]])
-std = .5
-mean = 0
-
 e_jt = np.array([0.8, 1.2])
 mean = 0.0
 std = 0.5
@@ -119,4 +141,3 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-print og.b_vec.shape
