@@ -65,7 +65,7 @@ class OG(object):
         return lambda_bar
     
 
-    def initialize_bvec(self):
+    def initialize_b_vec(self):
         """Initialize a random starting state."""
         self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
             np.max(self.lambda_bar)*(self.N/self.S*self.J)))
