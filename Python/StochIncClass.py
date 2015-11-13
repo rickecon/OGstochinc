@@ -76,30 +76,38 @@ class OG(object):
         self.r = alpha * A * ((L/K)**(1-alpha)) - delta
         self.w = (1-alpha)*A*((K/L)**alpha)
 
-    def solve_age_layer(self, s):
-        '''Solves the s layer problem'''
+    def calc_cs(self, b_s1, b_s, s, j):
+        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt
+        c_s = (1+r)*b_s + nvec[s]*e_j[j]*w-b_s1
+        c_mask = c_s[c_s<0]
+        c_s[c_mask] = .00001
+        return c_s
 
-
-
-    def u_prime(self, consump):
-        return consump**(-sigma)
-
-
-    def exp_u(self, consump, s):
-        '''returns the expected utility, given consumption'''
-        beta, r, pi = self.beta, self.r, self.Pi
-        eu = 0.
-        for j in xrange(self.J):
-            eu += pi[j]*u_prime(calc_consump(b,self.S,j)
-
-    def calc_consump(self, savings, age, ability):
-        '''
-        '''
-        if age == self.S:
-            consump = (1+self.r)*savings+self.e_jt[ability]*n_vec[age]*self.wage
+    def calc_cs1(self, b_s1, s, j, phi):
+        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt
+        if phi==None:
+            c_s = np.zeros_like(b_s1)
+            for i in xrange(self.J):
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
+                c_mask = c_j[c_j<0]
+                c_j[c_mask] = .00001
+                c_s += c_j
         else:
-            consump = 9999.
-        return consump
+            c_s = np.zeros_like(b_s1)
+            for i in xrange(self.J):
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
+                c_mask = c_j[c_j<0]
+                c_j[c_mask] = .00001
+                c_s += c_j
+        return c_s1
+
+    def eul_err(self, b_s1, b_s, phi, j):
+        beta, r = self.beta, self.r
+        c_s1 = self.calc_cs1(b_s1, s, j, phi)
+        c_s = self.calc_cs(b_s1, b_s, s, j)
+        eul_err = beta*(1+r)*(c_s1)**(-sigma) - c_s**(-sigma)
+        return eul_err
+
             
 # Define the Household parameters
 N = 200000
