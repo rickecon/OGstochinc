@@ -16,6 +16,8 @@ class OG(object):
          self.Pi,
          self.e_jt) = household_params
         self.beta = self.beta_annual**(80/self.S)
+        #Make sure that N is divisible by S
+        self.N = (self.N/self.S)*self.S
 
         nvec = np.ones(S)
         nvec[2*S/3:] = nvec[2*S/3:]*.3
@@ -47,9 +49,30 @@ class OG(object):
     
 
     def initialize_b_vec(self):
-        """Initialize a random starting state."""
         self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
             np.max(self.lambda_bar)*(self.N/self.S*self.J)))
+
+    def initialize_b(self):
+        """
+        Initialize a random starting state.
+        self.b_vec = (3,self.N) array where columns are:
+            age, ability type, initial capitalstock
+        """
+        #TODO make this a panda
+        b = np.random.gamma(2,6,self.N)
+        skip = self.N/self.S
+        ages = np.ones(self.N)
+        for i in xrange(self.S):
+            i += 1
+            ages[i*skip:(i+1)*skip] = i+1
+            test = ages[ages==i]
+        self.abilities = np.ones(self.N)
+        a_dist = np.random.multinomial(self.N, self.lambda_bar)
+        for n in a_dist: 
+            self.abilities[n:] += 1
+        np.random.shuffle(self.abilities)
+        self.b_vec = np.concatenate((ages, self.abilities, b), axis=1)
+        self.b_vec = self.b_vec.reshape(3,self.N).T
         
     def get_r_and_w(self):
         """Calculate r and w at the current state."""
