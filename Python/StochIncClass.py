@@ -1,12 +1,13 @@
-import time
 import numpy as np
 from scipy.optimize import fsolve
-from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.interpolate import UnivariateSpline
+import matplotlib.pyplot as plt
+%matplotlib inline
 
 
 class OG(object):
-    '''
-    '''
+    """
+    """
     def __init__(self, household_params, firm_params):
         """Instantiate the state parameters of the OG model."""
         (self.N,
@@ -66,11 +67,9 @@ class OG(object):
         b = np.random.gamma(2,2,self.N)
         skip = self.N/self.S
         b[:skip] = 0
-        ages = np.ones(self.N)
-        for i in xrange(self.S):
-            i += 1
-            ages[i*skip:(i+1)*skip] = i+1
-            test = ages[ages==i]
+        ages = np.zeros(self.N)
+        for i in xrange(1,self.S):
+            ages[i*skip:(i+1)*skip] = i
         self.abilities = np.ones(self.N)
         a_dist = np.random.multinomial(self.N, self.lambda_bar)
         for n in np.cumsum(a_dist[:-1]): 
@@ -82,7 +81,7 @@ class OG(object):
         
     def calc_cs(self, b_s1, b_s, s, j):
         r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt    
-        c_s = (1+r)*b_s + nvec[s-1]*e_j[j-1]*w-b_s1
+        c_s = (1+r)*b_s + nvec[s]*e_j[j-1]*w-b_s1
         cs_mask = c_s<0.0
         c_s[cs_mask] = 0.0
         return c_s, cs_mask
@@ -93,12 +92,12 @@ class OG(object):
         if phi==None:
             Ec_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
-                c_j = (1+r)*b_s1 + nvec[s]*e_j[i]*w
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
                 Ec_s1 += c_j*Pi[j-1,i]
         else:
             Ec_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
-                c_j = (1+r)*b_s1 + nvec[s]*e_j[i]*w - phi(b_s1)
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
                 Ec_s1 += c_j*Pi[j-1,i]
         Ecs1_mask = Ec_s1<0.0
         Ec_s1[Ecs1_mask] = 0.0
@@ -112,7 +111,6 @@ class OG(object):
         eul_err = beta*(1+r)*(Ec_s1)**(-sigma) - c_s**(-sigma)
         eul_err[Ecs1_mask] = 9999.
         eul_err[cs_mask] = 9999.
-        print eul_err
         return eul_err
 
             
@@ -121,7 +119,7 @@ class OG(object):
         #TODO use the panda
         self.set_state()
         phi = [None]*self.J
-        for s in xrange(self.S-1, 0, -1):
+        for s in xrange(self.S-2, -1, -1):
             for j in xrange(1,self.J+1):
                 print s, j
                 # Create the masks that will be used for this (s,j) combination.
@@ -133,25 +131,25 @@ class OG(object):
                 j_mask[:,1] = mask
                 # Solve the consumption problem.
                 phi_j = phi[j-1]
-                if phi_j is not None:
-                    plt.plot(phi_j(np.linspace(-1,20,100)))
-                    plt.show()
                 b_s = self.b_vec[b_mask]
+                s_ind = b_s.argsort()
                 # TODO Make this draw from previous distribution for guess.
-                guess = np.ones(num)*.0001
+                guess = np.ones(num)*.001
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
                 print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)[-1]
                 # Create the policy function.
-                phi[j-1] = InterpolatedUnivariateSpline(b_s, b_s1)
-                
+                phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
+#                 plt.plot(b_s,phi[j-1](b_s))
+#                 plt.title("b_s interpolated")
+#                 plt.show()
                 # Update the (s,j) part of the b_vec.
                 a_dist = np.random.multinomial(num, self.Pi[j-1])
                 new_j = np.ones(num)
                 for a in np.cumsum(a_dist[:-1]):
                     new_j[a:] += 1.0
                 self.b_vec[j_mask] = np.random.permutation(new_j)
-                self.b_vec[b_mask] = b_s1
-        mask = self.b_vec[:,0]==self.S
+                self.b_vec[b_mask] = b_s1[s_ind]
+        mask = self.b_vec[:,0]==self.S-1
         b_mask = np.zeros((self.N,3),dtype='bool')
         b_mask[:,2] = mask
         j_mask = np.zeros((self.N,3),dtype='bool')
@@ -209,4 +207,6 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
+og.update()
+# og.update()
 # og.update()
