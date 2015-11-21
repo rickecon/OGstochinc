@@ -28,7 +28,7 @@ class OG(object):
          self.alpha,
          self.delta_annual) = firm_params
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
-        self.initialize_b_vec()
+        self.initialize_b()
         self.set_state()
     
 
@@ -47,10 +47,6 @@ class OG(object):
         lambda_bar = lambda_bar.flatten()
         return lambda_bar
     
-
-    def initialize_b_vec(self):
-        self.b_vec = np.random.gamma(2,6,(self.S, self.J, 
-            np.max(self.lambda_bar)*(self.N/self.S*self.J)))
 
     def initialize_b(self):
         """
@@ -81,34 +77,36 @@ class OG(object):
         self.w = (1-alpha)*A*((K/L)**alpha)
 
     def calc_cs(self, b_s1, b_s, s, j):
-        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt
+        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt    
         c_s = (1+r)*b_s + nvec[s]*e_j[j]*w-b_s1
-        c_mask = c_s[c_s<0]
-        c_s[c_mask] = .00001
-        return c_s
+        cs_mask = c_s[c_s<0]
+        c_s[cs_mask] = .00001
+        return c_s, cs_mask
 
     def calc_cs1(self, b_s1, s, j, phi):
         beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt
+        nvec = np.concatenate((nvec,[0]))
+        b_s1 = np.concatenate((b_s1,[0]))
         if phi==None:
-            c_s = np.zeros_like(b_s1)
+            c_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
                 c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
-                c_mask = c_j[c_j<0]
-                c_j[c_mask] = .00001
-                c_s += c_j
+                cs1_mask = c_j<0
+                c_j[cs1_mask] = .00001
+                c_s1 += c_j
         else:
             c_s = np.zeros_like(b_s1)
             for i in xrange(self.J):
                 c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
-                c_mask = c_j[c_j<0]
-                c_j[c_mask] = .00001
-                c_s += c_j
-        return c_s1
+                cs1_mask = c_j<0
+                c_j[cs1_mask] = .00001
+                c_s1 += c_j
+        return c_s1, cs1_mask
 
-    def eul_err(self, b_s1, b_s, phi, j):
+    def eul_err(self, b_s1, b_s, phi, s, j):
         beta, r = self.beta, self.r
-        c_s1 = self.calc_cs1(b_s1, s, j, phi)
-        c_s = self.calc_cs(b_s1, b_s, s, j)
+        c_s1, cs1_mask = self.calc_cs1(b_s1, s, j, phi)
+        c_s, cs_mask = self.calc_cs(b_s1, b_s, s, j)
         eul_err = beta*(1+r)*(c_s1)**(-sigma) - c_s**(-sigma)
         return eul_err
 
@@ -116,17 +114,18 @@ class OG(object):
     def update(self):
         """Update b_vec to the next period."""
         #TODO use the panda
+        self.set_state()
         b_vec_new = np.ones_like(self.b_vec)*999
         phi = [None]*self.J
         for s in xrange(self.S-1, 0, -1):
             s_mask = self.b_vec[:,0]==s
-            for j in xrange(self.J):
+            for j in xrange(1,self.J+1):
                 j_mask = self.b_vec[s_mask][:,1]==j
                 phi_j = phi[j]
-                b_s = self.b_vec[s_mask][j_mask]
+                b_s = self.b_vec[s_mask][j_mask][:,2]
                 #TODO Make this draw from previous distribution for guess
                 guess = b_s
-                b_s1 = fsolve(eul_err, guess, args=(b_s, phi_j, j))
+                b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
                 phi[j] = InterpolatedUnivariateSpline(b_s, b_s1)
                 self.b_vec[s_mask][j_mask][:,0] += 1
                 self.b_vec[s_mask][j_mask][:,1] = np.multinomial(self.N/self.S/self.lambda_bar[j], self.Pi[j])
