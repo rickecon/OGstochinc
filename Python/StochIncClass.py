@@ -57,6 +57,7 @@ class OG(object):
         #TODO make this a panda
         b = np.random.gamma(2,6,self.N)
         skip = self.N/self.S
+        b[:skip] = 0
         ages = np.ones(self.N)
         for i in xrange(self.S):
             i += 1
@@ -78,8 +79,8 @@ class OG(object):
 
     def calc_cs(self, b_s1, b_s, s, j):
         beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt    
-        c_s = (1+r)*b_s + nvec[s]*e_j[j]*w-b_s1
-        cs_mask = c_s[c_s<0]
+        c_s = (1+r)*b_s + nvec[s]*e_j[j-1]*w-b_s1
+        cs_mask = c_s<0
         c_s[cs_mask] = .00001
         return c_s, cs_mask
 
@@ -95,7 +96,7 @@ class OG(object):
                 c_j[cs1_mask] = .00001
                 c_s1 += c_j
         else:
-            c_s = np.zeros_like(b_s1)
+            c_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
                 c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
                 cs1_mask = c_j<0
@@ -107,40 +108,45 @@ class OG(object):
         beta, r = self.beta, self.r
         c_s1, cs1_mask = self.calc_cs1(b_s1, s, j, phi)
         c_s, cs_mask = self.calc_cs(b_s1, b_s, s, j)
-        eul_err = beta*(1+r)*(c_s1)**(-sigma) - c_s**(-sigma)
+        eul_err = beta*(1+r)*(c_s1[:-1])**(-sigma) - c_s**(-sigma)
         return eul_err
 
             
     def update(self):
         """Update b_vec to the next period."""
         #TODO use the panda
+        b_vec = np.copy(self.b_vec)
         self.set_state()
-        b_vec_new = np.ones_like(self.b_vec)*999
         phi = [None]*self.J
         for s in xrange(self.S-1, 0, -1):
-            s_mask = self.b_vec[:,0]==s
+            print s
+            s_mask = b_vec[:,0]==s
             for j in xrange(1,self.J+1):
-                j_mask = self.b_vec[s_mask][:,1]==j
-                phi_j = phi[j]
-                b_s = self.b_vec[s_mask][j_mask][:,2]
+                j_mask = b_vec[s_mask][:,1]==j
+                phi_j = phi[j-1]
+                b_s = b_vec[s_mask][j_mask][:,2]
                 #TODO Make this draw from previous distribution for guess
                 guess = b_s
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
-                phi[j] = InterpolatedUnivariateSpline(b_s, b_s1)
-                self.b_vec[s_mask][j_mask][:,0] += 1
-                self.b_vec[s_mask][j_mask][:,1] = np.multinomial(self.N/self.S/self.lambda_bar[j], self.Pi[j])
-                self.b_vec[s_mask][j_mask][:,2] = b_s1
-        S_mask = self.b_vec[:,0]==self.S
-        self.b_vec[S_mask][:,0] = 0
-        a_dist = np.multinomial(self.N/self.S, self.lambda_bar)
+                phi[j-1] = InterpolatedUnivariateSpline(b_s, b_s1)
+                b_vec[s_mask][j_mask][:,0] = b_vec[s_mask][j_mask][:,0] + 1
+                print b_vec[s_mask][j_mask][:,0]
+                a_dist = np.random.multinomial(self.N/self.S/self.lambda_bar[j-1], self.Pi[j-1])
+                for a in a_dist:
+                    b_vec[s_mask][j_mask][:,1][a:] += 1.0
+                b_vec[s_mask][j_mask][:,2] = b_s1
+        S_mask = b_vec[:,0]==self.S
+        b_vec[S_mask][:,0] = 1
+        a_dist = np.random.multinomial(self.N/self.S, self.lambda_bar)
         for a in a_dist:
-            self.b_vec[S_mask][:,1][a:] += 1.0
-        self.b_vec[S_mask][:,2] = 0.0
+            b_vec[S_mask][:,1][a:] += 1.0
+        b_vec[S_mask][:,2] = 0.0
+        self.b_vec = b_vec
 
 
 # Define the Household parameters
-N = 200000
-S = 80
+N = 20000
+S = 10
 J = 2
 beta_annual = .96
 sigma = 3.0
