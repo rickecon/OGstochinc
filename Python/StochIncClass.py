@@ -2,10 +2,12 @@ import time
 import numpy as np
 from scipy.optimize import fsolve
 from scipy.interpolate import InterpolatedUnivariateSpline
+from matplotlib import pyplot as plt
 
 
 class OG(object):
     '''
+
     '''
     def __init__(self, household_params, firm_params):
         """Instantiate the state parameters of the OG model."""
@@ -112,7 +114,6 @@ class OG(object):
         eul_err = beta*(1+r)*(Ec_s1)**(-sigma) - c_s**(-sigma)
         eul_err[Ecs1_mask] = 9999.
         eul_err[cs_mask] = 9999.
-        print eul_err
         return eul_err
 
             
@@ -140,7 +141,7 @@ class OG(object):
                 # TODO Make this draw from previous distribution for guess.
                 guess = np.ones(num)*.0001
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
-                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)[-1]
+                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output = 1)[-1]
                 # Create the policy function.
                 phi[j-1] = InterpolatedUnivariateSpline(b_s, b_s1)
                 
