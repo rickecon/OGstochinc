@@ -3,6 +3,7 @@ import numpy as np
 from scipy.optimize import fsolve
 from scipy.interpolate import InterpolatedUnivariateSpline
 
+
 class OG(object):
     '''
     '''
@@ -16,7 +17,7 @@ class OG(object):
          self.Pi,
          self.e_jt) = household_params
         self.beta = self.beta_annual**(80/self.S)
-        #Make sure that N is divisible by S
+        # Force N to be divisible by S
         self.N = (self.N/self.S)*self.S
 
         nvec = np.ones(S)
@@ -30,14 +31,7 @@ class OG(object):
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
         self.initialize_b()
         self.set_state()
-    
-
-    def set_state(self):
-        """Set initial state and r and w."""
-        self.L = self.nvec.sum() * self.N
-        self.K = self.b_vec.sum()
-        self.get_r_and_w()
-
+        
 
     def get_lambda_bar(self, Pi):
         """Compute the ergodic distribution of the Markox chain."""
@@ -47,6 +41,20 @@ class OG(object):
         lambda_bar = lambda_bar.flatten()
         return lambda_bar
     
+    
+    def set_state(self):
+        """Set initial state and r and w."""
+        self.L = self.nvec.sum() * self.N
+        self.K = self.b_vec.sum()
+        self.get_r_and_w()
+        
+        
+    def get_r_and_w(self):
+        """Calculate r and w at the current state."""
+        A, alpha, delta, L, K = self.A, self.alpha, self.delta, self.L, self.K
+        self.r = alpha * A * ((L/K)**(1-alpha)) - delta
+        self.w = (1-alpha)*A*((K/L)**alpha)
+        
 
     def initialize_b(self):
         """
@@ -54,8 +62,8 @@ class OG(object):
         self.b_vec = (3,self.N) array where columns are:
             age, ability type, initial capitalstock
         """
-        #TODO make this a panda
-        b = np.random.gamma(2,6,self.N)
+        # TODO make this a panda
+        b = np.random.gamma(2,2,self.N)
         skip = self.N/self.S
         b[:skip] = 0
         ages = np.ones(self.N)
@@ -65,92 +73,109 @@ class OG(object):
             test = ages[ages==i]
         self.abilities = np.ones(self.N)
         a_dist = np.random.multinomial(self.N, self.lambda_bar)
-        for n in a_dist: 
+        for n in np.cumsum(a_dist[:-1]): 
             self.abilities[n:] += 1
         np.random.shuffle(self.abilities)
         self.b_vec = np.concatenate((ages, self.abilities, b), axis=1)
         self.b_vec = self.b_vec.reshape(3,self.N).T
-        
-    def get_r_and_w(self):
-        """Calculate r and w at the current state."""
-        A, alpha, delta, L, K = self.A, self.alpha, self.delta, self.L, self.K
-        self.r = alpha * A * ((L/K)**(1-alpha)) - delta
-        self.w = (1-alpha)*A*((K/L)**alpha)
 
+        
     def calc_cs(self, b_s1, b_s, s, j):
-        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt    
-        c_s = (1+r)*b_s + nvec[s]*e_j[j-1]*w-b_s1
-        cs_mask = c_s<0
-        c_s[cs_mask] = .00001
+        r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt    
+        c_s = (1+r)*b_s + nvec[s-1]*e_j[j-1]*w-b_s1
+        cs_mask = c_s<0.0
+        c_s[cs_mask] = 0.0
         return c_s, cs_mask
 
-    def calc_cs1(self, b_s1, s, j, phi):
-        beta, r, w, nvec, e_j = self.beta, self.r, self.w, self.nvec, self.e_jt
-        nvec = np.concatenate((nvec,[0]))
-        b_s1 = np.concatenate((b_s1,[0]))
+    
+    def calc_Ecs1(self, b_s1, s, j, phi):
+        r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt
         if phi==None:
-            c_s1 = np.zeros_like(b_s1)
+            Ec_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
-                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
-                cs1_mask = c_j<0
-                c_j[cs1_mask] = .00001
-                c_s1 += c_j
+                c_j = (1+r)*b_s1 + nvec[s]*e_j[i]*w
+                Ec_s1 += c_j*Pi[j-1,i]
         else:
-            c_s1 = np.zeros_like(b_s1)
+            Ec_s1 = np.zeros_like(b_s1)
             for i in xrange(self.J):
-                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
-                cs1_mask = c_j<0
-                c_j[cs1_mask] = .00001
-                c_s1 += c_j
-        return c_s1, cs1_mask
+                c_j = (1+r)*b_s1 + nvec[s]*e_j[i]*w - phi(b_s1)
+                Ec_s1 += c_j*Pi[j-1,i]
+        Ecs1_mask = Ec_s1<0.0
+        Ec_s1[Ecs1_mask] = 0.0
+        return Ec_s1, Ecs1_mask
 
+    
     def eul_err(self, b_s1, b_s, phi, s, j):
         beta, r = self.beta, self.r
-        c_s1, cs1_mask = self.calc_cs1(b_s1, s, j, phi)
+        Ec_s1, Ecs1_mask = self.calc_Ecs1(b_s1, s, j, phi)
         c_s, cs_mask = self.calc_cs(b_s1, b_s, s, j)
-        eul_err = beta*(1+r)*(c_s1[:-1])**(-sigma) - c_s**(-sigma)
+        eul_err = beta*(1+r)*(Ec_s1)**(-sigma) - c_s**(-sigma)
+        eul_err[Ecs1_mask] = 9999.
+        eul_err[cs_mask] = 9999.
+        print eul_err
         return eul_err
 
             
     def update(self):
         """Update b_vec to the next period."""
         #TODO use the panda
-        b_vec = np.copy(self.b_vec)
         self.set_state()
         phi = [None]*self.J
         for s in xrange(self.S-1, 0, -1):
-            print s
-            s_mask = b_vec[:,0]==s
             for j in xrange(1,self.J+1):
-                j_mask = b_vec[s_mask][:,1]==j
+                print s, j
+                # Create the masks that will be used for this (s,j) combination.
+                mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
+                num = np.sum(mask)
+                b_mask = np.zeros((self.N,3),dtype='bool')
+                b_mask[:,2] = mask
+                j_mask = np.zeros((self.N,3),dtype='bool')
+                j_mask[:,1] = mask
+                # Solve the consumption problem.
                 phi_j = phi[j-1]
-                b_s = b_vec[s_mask][j_mask][:,2]
-                #TODO Make this draw from previous distribution for guess
-                guess = b_s
+                if phi_j is not None:
+                    plt.plot(phi_j(np.linspace(-1,20,100)))
+                    plt.show()
+                b_s = self.b_vec[b_mask]
+                # TODO Make this draw from previous distribution for guess.
+                guess = np.ones(num)*.0001
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
+                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)[-1]
+                # Create the policy function.
                 phi[j-1] = InterpolatedUnivariateSpline(b_s, b_s1)
-                b_vec[s_mask][j_mask][:,0] = b_vec[s_mask][j_mask][:,0] + 1
-                print b_vec[s_mask][j_mask][:,0]
-                a_dist = np.random.multinomial(self.N/self.S/self.lambda_bar[j-1], self.Pi[j-1])
-                for a in a_dist:
-                    b_vec[s_mask][j_mask][:,1][a:] += 1.0
-                b_vec[s_mask][j_mask][:,2] = b_s1
-        S_mask = b_vec[:,0]==self.S
-        b_vec[S_mask][:,0] = 1
+                
+                # Update the (s,j) part of the b_vec.
+                a_dist = np.random.multinomial(num, self.Pi[j-1])
+                new_j = np.ones(num)
+                for a in np.cumsum(a_dist[:-1]):
+                    new_j[a:] += 1.0
+                self.b_vec[j_mask] = np.random.permutation(new_j)
+                self.b_vec[b_mask] = b_s1
+        mask = self.b_vec[:,0]==self.S
+        b_mask = np.zeros((self.N,3),dtype='bool')
+        b_mask[:,2] = mask
+        j_mask = np.zeros((self.N,3),dtype='bool')
+        j_mask[:,1] = mask
+        num = np.sum(mask)
+        # Update ages.
+        self.b_vec[:,0] += 1.0
+        self.b_vec[:,0] %= self.S
+        # Update b and j for the dead.
         a_dist = np.random.multinomial(self.N/self.S, self.lambda_bar)
-        for a in a_dist:
-            b_vec[S_mask][:,1][a:] += 1.0
-        b_vec[S_mask][:,2] = 0.0
-        self.b_vec = b_vec
-
+        new_j = np.ones(num)
+        for a in np.cumsum(a_dist[:-1]):
+            new_j[a:] += 1.0
+        self.b_vec[j_mask] = np.random.permutation(new_j)
+        self.b_vec[b_mask] = 0.0
+        self.phi = phi
 
 # Define the Household parameters
-N = 20000
-S = 10
+N = 2000
+S = 4
 J = 2
 beta_annual = .96
 sigma = 3.0
-Pi = np.array([[0.1, 0.9],
+Pi = np.array([[0.4, 0.6],
                [0.6, 0.4]])
 e_jt = np.array([0.8, 1.2])
 mean = 0.0
@@ -184,3 +209,4 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
+# og.update()
