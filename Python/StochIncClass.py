@@ -1,29 +1,10 @@
 import time
 import numpy as np
 from scipy.optimize import fsolve
-import gb2library
 from scipy.interpolate import InterpolatedUnivariateSpline
 
 class OG(object):
     '''
-    Overlapping generations object
-    Attributes:
-        self.N - Int, Number of unique agents in model (100,000)
-        self.S - Int, Number of years agent live (80)
-        self.J - Int, Number of ability types
-        self.beta_annual - Float, Annual discount rate
-        self.sigma - 
-        self.Pi - (SxJ) array, Markov probability matrix
-        self.e_jt - 
-        self.nvec
-        self.lambda_bar - (J) array, ergodic distribution of SS ability
-        self.alpha -
-        self.delta_annual
-        self.delta
-
-    Methods:
-        set_state:
-
     '''
     def __init__(self, household_params, firm_params):
         """Instantiate the state parameters of the OG model."""
@@ -110,21 +91,29 @@ class OG(object):
 
             
     def update(self):
-        """Update bvec to the next period."""
-        bvec_new = np.ones_like(self.bvec)*999
+        """Update b_vec to the next period."""
+        #TODO use the panda
+        b_vec_new = np.ones_like(self.b_vec)*999
         phi = [None]*self.J
         for s in xrange(self.S-1, 0, -1):
+            s_mask = self.b_vec[:,0]==s
             for j in xrange(self.J):
+                j_mask = self.b_vec[s_mask][:,1]==j
                 phi_j = phi[j]
-                b_s = self.bvec[s,j]
-                mask = b_s<999
-                b_s = b_s[mask]
+                b_s = self.b_vec[s_mask][j_mask]
                 #TODO Make this draw from previous distribution for guess
-                guess = b_s/2.
+                guess = b_s
                 b_s1 = fsolve(eul_err, guess, args=(b_s, phi_j, j))
                 phi[j] = InterpolatedUnivariateSpline(b_s, b_s1)
-                bvec_new[s+1,j][mask] = b_s1
-        self.bvec = self.randomize(bvec_new)
+                self.b_vec[s_mask][j_mask][:,0] += 1
+                self.b_vec[s_mask][j_mask][:,1] = np.multinomial(self.N/self.S/self.lambda_bar[j], self.Pi[j])
+                self.b_vec[s_mask][j_mask][:,2] = b_s1
+        S_mask = self.b_vec[:,0]==self.S
+        self.b_vec[S_mask][:,0] = 0
+        a_dist = np.multinomial(self.N/self.S, self.lambda_bar)
+        for a in a_dist:
+            self.b_vec[S_mask][:,1][a:] += 1.0
+        self.b_vec[S_mask][:,2] = 0.0
 
 
 # Define the Household parameters
