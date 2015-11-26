@@ -65,7 +65,7 @@ class OG(object):
             age, ability type, initial capitalstock
         """
         # TODO make this a panda
-        intial_params = [3.,.03,.5]
+        intial_params = [3.,.001,.5]
         a, mean, b = intial_params
         b = gamma.rvs(a ,loc=mean, scale=b, size=self.N)
         skip = self.N/self.S
@@ -154,8 +154,8 @@ class OG(object):
                 # Create the policy function.
                 # Is Policy function working for age = 0/1?
                 phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
-                plt.plot(b_s,phi[j-1](b_s))
-                plt.title("b_s interpolated")
+                #plt.plot(b_s,phi[j-1](b_s))
+                #plt.title("b_s interpolated")
                 # plt.show()
                 # Update the (s,j) part of the b_vec.
                 a_dist = np.random.multinomial(num, self.Pi[j-1])
@@ -278,5 +278,6 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
+#og.update()
 #og.plot()
 
