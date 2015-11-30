@@ -155,9 +155,9 @@ class OG(object):
                 # Create the policy function.
                 # Is Policy function working for age = 0/1?
                 phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
-                #plt.plot(b_s,phi[j-1](b_s))
-                #plt.title("b_s interpolated")
-                # plt.show()
+                plt.plot(b_s,phi[j-1](b_s))
+                plt.title("b_s interpolated")
+                plt.show()
                 # Update the (s,j) part of the b_vec.
                 a_dist = np.random.multinomial(num, self.Pi[j-1])
                 new_j = np.ones(num)
@@ -200,6 +200,8 @@ class OG(object):
         Fits each s,j group to a gamma distribution
         '''
         print 'Fitting curves'
+        self.gamma_par[0,:,:] *=0
+        self.gen_gamma_par[0,:,:] *=0
         for s in xrange(1,self.S):
             for j in xrange(1,self.J+1):
                 g_params = self.gamma_par[s,j-1,:]
