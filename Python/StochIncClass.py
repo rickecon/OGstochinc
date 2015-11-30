@@ -1,8 +1,10 @@
 import numpy as np
 from scipy.optimize import fsolve
+from scipy.interpolate import InterpolatedUnivariateSpline
+from matplotlib import pyplot as plt
 from scipy.interpolate import UnivariateSpline
-import matplotlib.pyplot as plt
-%matplotlib inline
+from scipy.stats import gamma
+from scipy.stats import gengamma
 
 
 class OG(object):
@@ -64,7 +66,9 @@ class OG(object):
             age, ability type, initial capitalstock
         """
         # TODO make this a panda
-        b = np.random.gamma(2,2,self.N)
+        intial_params = [3.,.001,.5]
+        a, mean, b = intial_params
+        b = gamma.rvs(a ,loc=mean, scale=b, size=self.N)
         skip = self.N/self.S
         b[:skip] = 0
         ages = np.zeros(self.N)
@@ -77,6 +81,13 @@ class OG(object):
         np.random.shuffle(self.abilities)
         self.b_vec = np.concatenate((ages, self.abilities, b), axis=1)
         self.b_vec = self.b_vec.reshape(3,self.N).T
+        #Initilize the parameters vectors
+        self.gamma_par = np.zeros((self.S, self.J, 3))
+        self.gen_gamma_par = np.ones((self.S, self.J, 4))
+        for s in xrange(self.S):
+            for j in xrange(self.J):
+                self.gamma_par[s,j,:] = intial_params
+                self.gen_gamma_par[s,j,:-1] = intial_params
 
         
     def calc_cs(self, b_s1, b_s, s, j):
@@ -119,6 +130,7 @@ class OG(object):
         #TODO use the panda
         self.set_state()
         phi = [None]*self.J
+        print phi
         for s in xrange(self.S-2, -1, -1):
             for j in xrange(1,self.J+1):
                 print s, j
@@ -134,14 +146,18 @@ class OG(object):
                 b_s = self.b_vec[b_mask]
                 s_ind = b_s.argsort()
                 # TODO Make this draw from previous distribution for guess.
-                guess = np.ones(num)*.001
+                g_params = self.gamma_par[s,j-1,:]
+                a, mean, b = g_params
+                print mean
+                guess = np.ones(num)*mean
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
-                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)[-1]
+                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output = 1)[-1]
                 # Create the policy function.
+                # Is Policy function working for age = 0/1?
                 phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
-#                 plt.plot(b_s,phi[j-1](b_s))
-#                 plt.title("b_s interpolated")
-#                 plt.show()
+                plt.plot(b_s,phi[j-1](b_s))
+                plt.title("b_s interpolated")
+                plt.show()
                 # Update the (s,j) part of the b_vec.
                 a_dist = np.random.multinomial(num, self.Pi[j-1])
                 new_j = np.ones(num)
@@ -166,18 +182,76 @@ class OG(object):
         self.b_vec[j_mask] = np.random.permutation(new_j)
         self.b_vec[b_mask] = 0.0
         self.phi = phi
+        self.fit_params()
+
+    def gamma_fit(self, b_vec, params, s, j):
+        a, mean, scaler = params
+        params = gamma.fit(b_vec, a, loc=mean, scale=scaler)
+        print params
+        self.gamma_par[s,j-1,:] = params
+
+    def gen_gamma_fit(self, b_vec, params, s, j):
+        a, mean, scaler, c = params
+        params = gengamma.fit(b_vec, a, c, loc=mean, scale=scaler)
+        self.gen_gamma_par[s,j-1,:] = params
+        
+    def fit_params(self):
+        '''
+        Fits each s,j group to a gamma distribution
+        '''
+        print 'Fitting curves'
+        self.gamma_par[0,:,:] *=0
+        self.gen_gamma_par[0,:,:] *=0
+        for s in xrange(1,self.S):
+            for j in xrange(1,self.J+1):
+                g_params = self.gamma_par[s,j-1,:]
+                gg_params = self.gen_gamma_par[s,j-1,:]
+                mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
+                num = np.sum(mask)
+                b_mask = np.zeros((self.N,3),dtype='bool')
+                b_mask[:,2] = mask
+                j_mask = np.zeros((self.N,3),dtype='bool')
+                j_mask[:,1] = mask
+                b_vec = self.b_vec[b_mask]
+                self.gamma_fit(b_vec, g_params, s, j)
+                self.gen_gamma_fit(b_vec, gg_params, s, j)
+        print 'curves fit'
+        pass
+
+    def plot(self):
+        for s in xrange(1,self.S):
+            for j in xrange(1,self.J+1):
+                print s
+                mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
+                num = np.sum(mask)
+                b_mask = np.zeros((self.N,3),dtype='bool')
+                b_mask[:,2] = mask
+                j_mask = np.zeros((self.N,3),dtype='bool')
+                j_mask[:,1] = mask
+                b_vec = self.b_vec[b_mask]
+                print b_vec.shape
+                if len(b_vec) != 0:
+                    x_plot = np.linspace(.1,10,1000)
+                    g_params = self.gamma_par[s,j-1,:]
+                    a, mean, b = g_params
+                    g_x = gamma.pdf(x_plot,a,loc=mean,scale=b)
+                    fig = plt.figure()
+                    ax = fig.add_subplot(1,1,1)
+                    ax.hist(b_vec, bins=50, normed=True, label="data")
+                    ax.plot(x_plot, g_x, 'r-', label="pdf")
+                    ax.legend(loc='best')
+                    plt.show()
+        pass
 
 # Define the Household parameters
-N = 2000
-S = 4
+N = 10000
+S = 10
 J = 2
 beta_annual = .96
 sigma = 3.0
 Pi = np.array([[0.4, 0.6],
                [0.6, 0.4]])
 e_jt = np.array([0.8, 1.2])
-mean = 0.0
-std = 0.5
 
 # S = 4
 # J = 7
@@ -207,6 +281,7 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-og.update()
 # og.update()
-# og.update()
+#og.update()
+#og.plot()
+
