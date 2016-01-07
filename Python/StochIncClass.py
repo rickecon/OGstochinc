@@ -1,11 +1,9 @@
 import numpy as np
 from scipy.optimize import fsolve
-from scipy.interpolate import InterpolatedUnivariateSpline
 from matplotlib import pyplot as plt
-from scipy.interpolate import UnivariateSpline
 from scipy.stats import gamma
 from scipy.stats import gengamma
-
+from quantecon import markov
 
 class OG(object):
     """
@@ -29,7 +27,8 @@ class OG(object):
         MC = markov.core.MarkovChain(self.Pi)
         self.lambda_bar = MC.stationary_distributions
         weights = (self.lambda_bar/(self.lambda_bar.min())*self.N).astype('int')
-        initial_e = np.zeros(np.sum(weights))
+        self.M = np.sum(weights)
+        initial_e = np.zeros(self.M)
         for weight in np.cumsum(weights[0][1:]):
             initial_e[weight:] += 1
         self.shocks = MC.simulate(self.S, initial_e).T
@@ -40,8 +39,8 @@ class OG(object):
         
         self.delta = 1-(1-self.delta_annual)**(80/self.S)
         
-#         self.initialize_b()
-#         self.set_state()
+        self.initialize_b()
+        self.set_state()
     
     
     
@@ -67,22 +66,22 @@ class OG(object):
         self.b_vec = (3,self.N) array where columns are:
             age, ability type, initial capitalstock
         """
-        # TODO make this a panda
         intial_params = [3.,.001,.5]
-        a, mean, b = intial_params
-        b = gamma.rvs(a ,loc=mean, scale=b, size=self.N)
-        skip = self.N/self.S
-        b[:skip] = 0
-        ages = np.zeros(self.N)
-        for i in xrange(1,self.S):
-            ages[i*skip:(i+1)*skip] = i
-        self.abilities = np.ones(self.N)
-        a_dist = np.random.multinomial(self.N, self.lambda_bar)
-        for n in np.cumsum(a_dist[:-1]): 
-            self.abilities[n:] += 1
-        np.random.shuffle(self.abilities)
-        self.b_vec = np.concatenate((ages, self.abilities, b), axis=1)
-        self.b_vec = self.b_vec.reshape(3,self.N).T
+        a, mean, scale = intial_params
+        self.b_vec = gamma.rvs(a , loc=mean, scale=scale, size=(self.S,self.M))
+        self.b_vec[0] = 0.0
+#         skip = self.N/self.S
+#         b[:skip] = 0
+#         ages = np.zeros(self.N)
+#         for i in xrange(1,self.S):
+#             ages[i*skip:(i+1)*skip] = i
+#         self.abilities = np.ones(self.N)
+#         a_dist = np.random.multinomial(self.N, self.lambda_bar)
+#         for n in np.cumsum(a_dist[:-1]): 
+#             self.abilities[n:] += 1
+#         np.random.shuffle(self.abilities)
+#         self.b_vec = np.concatenate((ages, self.abilities, b), axis=1)
+#         self.b_vec = self.b_vec.reshape(3,self.N).T
 #         #Initilize the parameters vectors
 #         self.gamma_par = np.zeros((self.S, self.J, 3))
 #         self.gen_gamma_par = np.ones((self.S, self.J, 4))
@@ -92,105 +91,105 @@ class OG(object):
 #                 self.gen_gamma_par[s,j,:-1] = intial_params
 
         
-#     def calc_cs(self, b_s1, b_s, s, j):
-#         r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt    
-#         c_s = (1+r)*b_s + nvec[s]*e_j[j-1]*w-b_s1
-#         cs_mask = c_s<0.0
-#         c_s[cs_mask] = 0.0
-#         return c_s, cs_mask
+    def calc_cs(self, b_s1, b_s, s, j):
+        r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt    
+        c_s = (1+r)*b_s + nvec[s]*e_j[j-1]*w-b_s1
+        cs_mask = c_s<0.0
+        c_s[cs_mask] = 0.0
+        return c_s, cs_mask
 
     
-#     def calc_Ecs1(self, b_s1, s, j, phi):
-#         r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt
-#         if phi==None:
-#             Ec_s1 = np.zeros_like(b_s1)
-#             for i in xrange(self.J):
-#                 c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
-#                 Ec_s1 += c_j*Pi[j-1,i]
-#         else:
-#             Ec_s1 = np.zeros_like(b_s1)
-#             for i in xrange(self.J):
-#                 c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
-#                 Ec_s1 += c_j*Pi[j-1,i]
-#         Ecs1_mask = Ec_s1<0.0
-#         Ec_s1[Ecs1_mask] = 0.0
-#         return Ec_s1, Ecs1_mask
+    def calc_Ecs1(self, b_s1, s, j, phi):
+        r, w, nvec, e_j = self.r, self.w, self.nvec, self.e_jt
+        if phi==None:
+            Ec_s1 = np.zeros_like(b_s1)
+            for i in xrange(self.J):
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w
+                Ec_s1 += c_j*Pi[j-1,i]
+        else:
+            Ec_s1 = np.zeros_like(b_s1)
+            for i in xrange(self.J):
+                c_j = (1+r)*b_s1 + nvec[s+1]*e_j[i]*w - phi(b_s1)
+                Ec_s1 += c_j*Pi[j-1,i]
+        Ecs1_mask = Ec_s1<0.0
+        Ec_s1[Ecs1_mask] = 0.0
+        return Ec_s1, Ecs1_mask
 
     
-#     def eul_err(self, b_s1, b_s, phi, s, j):
-#         beta, r = self.beta, self.r
-#         Ec_s1, Ecs1_mask = self.calc_Ecs1(b_s1, s, j, phi)
-#         c_s, cs_mask = self.calc_cs(b_s1, b_s, s, j)
-#         eul_err = beta*(1+r)*(Ec_s1)**(-sigma) - c_s**(-sigma)
-#         eul_err[Ecs1_mask] = 9999.
-#         eul_err[cs_mask] = 9999.
-#         return eul_err
+    def eul_err(self, b_s1, b_s, phi, s, j):
+        beta, r = self.beta, self.r
+        Ec_s1, Ecs1_mask = self.calc_Ecs1(b_s1, s, j, phi)
+        c_s, cs_mask = self.calc_cs(b_s1, b_s, s, j)
+        eul_err = beta*(1+r)*(Ec_s1)**(-sigma) - c_s**(-sigma)
+        eul_err[Ecs1_mask] = 9999.
+        eul_err[cs_mask] = 9999.
+        return eul_err
 
             
-#     def update(self):
-#         """Update b_vec to the next period."""
-#         #TODO use the panda
-#         self.set_state()
+    def update(self):
+        """Update b_vec to the next period."""
+        self.set_state()
+        for m in range(self.M)
         
-#         for s in xrange(self.S-2, -1, -1):
-#             phi = [None]*self.J
-#             for j in xrange(1,self.J+1):
-#                 print s, j
-#                 # Create the masks that will be used for this (s,j) combination.
-#                 mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
-#                 num = np.sum(mask)
-#                 b_mask = np.zeros((self.N,3),dtype='bool')
-#                 b_mask[:,2] = mask
-#                 j_mask = np.zeros((self.N,3),dtype='bool')
-#                 j_mask[:,1] = mask
-#                 # Solve the consumption problem.
-#                 phi_j = phi[j-1]
-#                 b_s = self.b_vec[b_mask]
-#                 s_ind = b_s.argsort()
-#                 # TODO Make this draw from previous distribution for guess.
-#                 g_params = self.gamma_par[s,j-1,:]
-#                 a, mean, b = g_params
-#                 print mean
-#                 guess = np.ones(num)*mean
-#                 b_s1, dic, ier, message = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)
-#                 print message
+        for s in xrange(self.S-2, -1, -1):
+            phi = [None]*self.J
+            for j in xrange(1,self.J+1):
+                print s, j
+                # Create the masks that will be used for this (s,j) combination.
+                mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
+                num = np.sum(mask)
+                b_mask = np.zeros((self.N,3),dtype='bool')
+                b_mask[:,2] = mask
+                j_mask = np.zeros((self.N,3),dtype='bool')
+                j_mask[:,1] = mask
+                # Solve the consumption problem.
+                phi_j = phi[j-1]
+                b_s = self.b_vec[b_mask]
+                s_ind = b_s.argsort()
+                # TODO Make this draw from previous distribution for guess.
+                g_params = self.gamma_par[s,j-1,:]
+                a, mean, b = g_params
+                print mean
+                guess = np.ones(num)*mean
+                b_s1, dic, ier, message = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)
+                print message
 
-#                 if s==0:
-#                     b_s1, dic, ier, message = fsolve(self.eul_err, .001, args=(0.0, phi_j, s, j), full_output=1)
-#                     print b_s1, message
-#                     b_s1 = np.ones(num)*b_s1
-#                 # Create the policy function.
-#                 # Is Policy function working for age = 0/1?
-#                 phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
-#                 plt.plot(np.linspace(-1,5,100), phi[j-1](np.linspace(-1,5,100)))
-#                 plt.plot(b_s, b_s1, '.')
-#                 plt.title("The policy function")
-#                 plt.show()
-#                 # Update the (s,j) part of the b_vec.
-#                 a_dist = np.random.multinomial(num, self.Pi[j-1])
-#                 new_j = np.ones(num)
-#                 for a in np.cumsum(a_dist[:-1]):
-#                     new_j[a:] += 1.0
-#                 self.b_vec[j_mask] = np.random.permutation(new_j)
-#                 self.b_vec[b_mask] = b_s1[s_ind]
-#         mask = self.b_vec[:,0]==self.S-1
-#         b_mask = np.zeros((self.N,3),dtype='bool')
-#         b_mask[:,2] = mask
-#         j_mask = np.zeros((self.N,3),dtype='bool')
-#         j_mask[:,1] = mask
-#         num = np.sum(mask)
-#         # Update ages.
-#         self.b_vec[:,0] += 1.0
-#         self.b_vec[:,0] %= self.S
-#         # Update b and j for the dead.
-#         a_dist = np.random.multinomial(self.N/self.S, self.lambda_bar)
-#         new_j = np.ones(num)
-#         for a in np.cumsum(a_dist[:-1]):
-#             new_j[a:] += 1.0
-#         self.b_vec[j_mask] = np.random.permutation(new_j)
-#         self.b_vec[b_mask] = 0.0
-#         self.phi = phi
-#         self.fit_params()
+                if s==0:
+                    b_s1, dic, ier, message = fsolve(self.eul_err, .001, args=(0.0, phi_j, s, j), full_output=1)
+                    print b_s1, message
+                    b_s1 = np.ones(num)*b_s1
+                # Create the policy function.
+                # Is Policy function working for age = 0/1?
+                phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
+                plt.plot(np.linspace(-1,5,100), phi[j-1](np.linspace(-1,5,100)))
+                plt.plot(b_s, b_s1, '.')
+                plt.title("The policy function")
+                plt.show()
+                # Update the (s,j) part of the b_vec.
+                a_dist = np.random.multinomial(num, self.Pi[j-1])
+                new_j = np.ones(num)
+                for a in np.cumsum(a_dist[:-1]):
+                    new_j[a:] += 1.0
+                self.b_vec[j_mask] = np.random.permutation(new_j)
+                self.b_vec[b_mask] = b_s1[s_ind]
+        mask = self.b_vec[:,0]==self.S-1
+        b_mask = np.zeros((self.N,3),dtype='bool')
+        b_mask[:,2] = mask
+        j_mask = np.zeros((self.N,3),dtype='bool')
+        j_mask[:,1] = mask
+        num = np.sum(mask)
+        # Update ages.
+        self.b_vec[:,0] += 1.0
+        self.b_vec[:,0] %= self.S
+        # Update b and j for the dead.
+        a_dist = np.random.multinomial(self.N/self.S, self.lambda_bar)
+        new_j = np.ones(num)
+        for a in np.cumsum(a_dist[:-1]):
+            new_j[a:] += 1.0
+        self.b_vec[j_mask] = np.random.permutation(new_j)
+        self.b_vec[b_mask] = 0.0
+        self.phi = phi
+        self.fit_params()
 
 #     def gamma_fit(self, b_vec, params, s, j):
 #         a, mean, scaler = params
