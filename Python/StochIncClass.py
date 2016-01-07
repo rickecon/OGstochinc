@@ -15,7 +15,7 @@ class OG(object):
         (self.N,
          self.S,
          self.J,
-         self.beta_annual,
+        self.beta_annual,
          self.sigma,
          self.Pi,
          self.e_jt) = household_params
