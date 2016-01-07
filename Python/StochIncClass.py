@@ -124,6 +124,44 @@ class OG(object):
         eul_err[cs_mask] = 9999.
         return eul_err
 
+    def solve_1_agent(self, s, j):
+        self.set_state()
+        phi = [None]*self.J
+        print phi
+        print s, j
+        # Create the masks that will be used for this (s,j) combination.
+        mask = (self.b_vec[:,1]==j) & (self.b_vec[:,0]==s)
+        num = np.sum(mask)
+        b_mask = np.zeros((self.N,3),dtype='bool')
+        b_mask[:,2] = mask
+        j_mask = np.zeros((self.N,3),dtype='bool')
+        j_mask[:,1] = mask
+        # Solve the consumption problem.
+        phi_j = phi[j-1]
+        b_s = self.b_vec[b_mask]
+        s_ind = b_s.argsort()
+        # TODO Make this draw from previous distribution for guess.
+        g_params = self.gamma_par[s,j-1,:]
+        a, mean, b = g_params
+        print mean
+        if s == 0:
+            guess = np.ones(num)*(-.1)
+            print guess[0]
+        else:
+            guess = np.ones(num)*mean
+            print guess[0]
+        b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
+        print b_s1
+        print phi_j
+        #print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)
+        # Create the policy function.
+        # Is Policy function working for age = 0/1?
+        phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind], k=1)
+        #plt.plot(b_s,phi[j-1](b_s))
+        #plt.title("b_s interpolated")
+        #plt.show()
+        # Update the (s,j) part of the b_vec.
+        print 
             
     def update(self):
         """Update b_vec to the next period."""
@@ -148,16 +186,24 @@ class OG(object):
                 # TODO Make this draw from previous distribution for guess.
                 g_params = self.gamma_par[s,j-1,:]
                 a, mean, b = g_params
-                print mean
-                guess = np.ones(num)*mean
+                if s == 0:
+                    guess = np.ones(num)*(-.0005)
+                    print guess[0]
+                    print phi_j(0)
+                    raw_input()
+                else:
+                    guess = np.ones(num)*mean
+                    print guess[0]
                 b_s1 = fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j))
-                print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output = 1)[-1]
+                print b_s1
+                print phi_j
+                #print fsolve(self.eul_err, guess, args=(b_s, phi_j, s, j), full_output=1)
                 # Create the policy function.
                 # Is Policy function working for age = 0/1?
-                phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind])
-                plt.plot(b_s,phi[j-1](b_s))
-                plt.title("b_s interpolated")
-                plt.show()
+                phi[j-1] = UnivariateSpline(b_s[s_ind], b_s1[s_ind],k=1)
+                #plt.plot(b_s,phi[j-1](b_s))
+                #plt.title("b_s interpolated")
+                #plt.show()
                 # Update the (s,j) part of the b_vec.
                 a_dist = np.random.multinomial(num, self.Pi[j-1])
                 new_j = np.ones(num)
