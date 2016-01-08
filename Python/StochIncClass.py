@@ -57,7 +57,6 @@ class OG(object):
         A, alpha, delta, L, K = self.A, self.alpha, self.delta, self.L, self.K
         self.r = alpha * A * ((L/K)**(1-alpha)) - delta
         self.w = (1-alpha)*A*((K/L)**alpha)
-        print self.r, self.w
 
     def initialize_b(self):
         """
@@ -104,8 +103,8 @@ class OG(object):
 
 
     def solve_1_agent(self,m):
-#         b0 = self.b_vec[1:,m]
-        b0 = np.ones(39)*.1
+        b0 = self.b_vec[1:,m]
+#         b0 = np.ones(39)*.1
         b, info, ier, mesg = fsolve(self.eul_err, b0, args=(m), full_output=1)
         return b, ier
 
@@ -113,9 +112,10 @@ class OG(object):
     def update(self):
         """Update b_vec to the next period."""
         self.set_state()
-        for m in range(1):
+        for m in range(self.M):
+            self.set_state()
             self.b_vec[1:,m], ier = self.solve_1_agent(m)
-            print self.b_vec[:,m]
+#             print self.b_vec[:,m]
             if ier!=1:
                 print "The fsolve didn't converge."
 
