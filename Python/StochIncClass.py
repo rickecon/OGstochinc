@@ -2,7 +2,6 @@ import numpy as np
 from scipy.optimize import fsolve
 from matplotlib import pyplot as plt
 from scipy.stats import gamma
-from scipy.stats import gengamma
 from quantecon import markov
 
 class OG(object):
@@ -47,8 +46,8 @@ class OG(object):
     def set_state(self):
         """Set initial state and r and w."""
         self.L = self.nvec.sum() * self.N
-        self.K = self.b_vec.sum()
-        # Check to see if K makes sense.
+        weightedK = np.array([self.b_vec[self.shocks==i].sum() for i in range(self.J)])
+        self.K = np.sum(self.lambda_bar*weightedK)/self.S
         self.get_r_and_w()
         
         
@@ -64,9 +63,10 @@ class OG(object):
         self.b_vec = (3,self.N) array where columns are:
             age, ability type, initial capitalstock
         """
-        intial_params = [3.,.001,.5]
-        a, mean, scale = intial_params
-        self.b_vec = gamma.rvs(a , loc=mean, scale=scale, size=(self.S,self.M))
+#         intial_params = [3.,.001,.5]
+#         a, mean, scale = intial_params
+#         self.b_vec = gamma.rvs(a , loc=mean, scale=scale, size=(self.S,self.M))
+        self.b_vec = np.ones((self.S, self.M))*.1
         self.b_vec[0] = 0.0
 
         
@@ -84,7 +84,7 @@ class OG(object):
     def calc_Ec1(self, b, m):
         b0 = b
         b1 = np.r_[b[1:],0]
-        pi = Pi[self.shocks[1:,m]]
+        pi = Pi[self.shocks[:-1,m]]
         r, w, nvec = self.r, self.w, self.nvec
         Ec1 = (pi*(nvec[1:,None]*self.e*w+(1+r)*b0[:,None]-b1[:,None])).sum(1)
         Ec1_mask = Ec1<0.0
@@ -103,26 +103,39 @@ class OG(object):
 
 
     def solve_1_agent(self,m):
-        b0 = self.b_vec[1:,m]
-#         b0 = np.ones(39)*.1
+        b0 = np.ones(self.S-1)*.1
+#         if m!=0:
+#             b0 = self.b_vec[1:,m-1]
         b, info, ier, mesg = fsolve(self.eul_err, b0, args=(m), full_output=1)
-        return b, ier
+        return b, ier, mesg
 
 
     def update(self):
         """Update b_vec to the next period."""
-        self.set_state()
-        for m in range(self.M):
-            self.set_state()
-            self.b_vec[1:,m], ier = self.solve_1_agent(m)
-#             print self.b_vec[:,m]
+        for m in range(5):
+            self.b_vec[1:,m], ier, mesg = self.solve_1_agent(m)
+#             print mesg
+#             print self.b_vec[:,:3]
             if ier!=1:
                 print "The fsolve didn't converge."
 
+    def calc_ss(self, tol=1e-10, maxiter=100):
+        self.set_state()
+        self.r, self.w = 2., .2
+        diff = 1
+        count = 0
+        while diff>tol and count<maxiter:
+            r0, w0 = self.r, self.w
+            self.update()
+            self.set_state()
+            diff = max(self.r-r0, self.w-w0)
+            count += 1
+            print diff, count
+
 
 # Define the Household parameters
-N = 1000
-S = 40
+N = 100
+S = 10
 J = 2
 beta_annual = .96
 sigma = 3.0
@@ -130,7 +143,7 @@ Pi = np.array([[0.4, 0.6],
                [0.6, 0.4]])
 e_jt = np.array([0.8, 1.2])
 
-# S = 4
+# S = 10
 # J = 7
 # Pi = np.array([[0.40,0.30,0.24,0.18,0.14,0.10,0.06],
 #                [0.30,0.40,0.30,0.24,0.18,0.14,0.10],
@@ -157,6 +170,6 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-# og.update()
+#og.update()
 #og.update()
 #og.plot()
