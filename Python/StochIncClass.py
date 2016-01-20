@@ -172,4 +172,5 @@ rho = .5
 og = OG(household_params, firm_params)
 #og.update()
 #og.update()
+
 #og.plot()
