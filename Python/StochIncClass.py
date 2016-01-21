@@ -1,7 +1,5 @@
 import numpy as np
-from scipy.optimize import fsolve
-from matplotlib import pyplot as plt
-from scipy.stats import gamma
+from scipy.optimize import fsolve, root
 from quantecon import markov
 from scipy.interpolate import UnivariateSpline
 
@@ -107,37 +105,38 @@ class OG(object):
 #         e_max = np.max(self.e)
 #         bound = np.sum([(1+r)**i*w*nvec[S-1-i]*e_max for i in range(S)])
 #         print bound
-        bound = 2.
-        grid = np.linspace(0, bound, 101)
+        bound = 3.
+        self.grid = np.linspace(-bound, bound, 101)
         self.Psi = np.empty((self.S-1, self.J, 101))
         psi = None
         for j in range(self.J):
             for s in range(self.S-2, -1, -1):
-                print s, j
-                guess = np.ones(101)*.001
-                self.Psi[s,j], info, ier, mesg = fsolve(self.eul_err, guess, args=(s,j,psi,grid), full_output=1) 
+                guess = np.ones(101)*.01
+                sol = root(self.eul_err, guess, args=(s,j,psi,self.grid), method='broyden1') 
+                self.Psi[s,j], ier = sol.x, sol.success
+#                 , info, ier, mesg = root(self.eul_err, guess, args=(s,j,psi,self.grid), method='broyden1') 
                 if ier!=1:
-                    print 'warning'
-                psi = UnivariateSpline(self.Psi[s,j], grid)
+                    print 'Warning. Did not converge.'
+                psi = UnivariateSpline(self.Psi[s,j], self.grid)
     
     
     def update_bvec(self):
-        for s in range(1, self.S):
+        for s in range(self.S-1):
             for j in range(self.J):
-                psi = UnivariateSpline(Psi[s, j])
-                mask = self.shocks[s]==j
-                self.b_vec[mask] = psi(self.b_vec[mask])
-        self.b_vec = np.roll(self.b_vec, axis=0)
-        
+                psi = UnivariateSpline(self.Psi[s, j], self.grid)
+                mask = (self.shocks[s]==j)
+                self.b_vec[s+1,mask] = psi(self.b_vec[s,mask])
+    
 
     def calc_ss(self, tol=1e-10, maxiter=100):
         self.set_state()
-        self.r, self.w = 1., .2
+        self.r, self.w = 2., .2
         diff = 1
         count = 0
         while diff>tol and count<maxiter:
             r0, w0 = self.r, self.w
-            self.update()
+            self.update_polfun()
+            self.update_bvec()
             self.set_state()
             diff = max(self.r-r0, self.w-w0)
             count += 1
@@ -181,4 +180,3 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-
