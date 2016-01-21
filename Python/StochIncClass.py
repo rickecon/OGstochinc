@@ -3,6 +3,7 @@ from scipy.optimize import fsolve
 from matplotlib import pyplot as plt
 from scipy.stats import gamma
 from quantecon import markov
+from scipy.interpolate import UnivariateSpline
 
 class OG(object):
     """
@@ -70,58 +71,68 @@ class OG(object):
         self.b_vec[0] = 0.0
 
         
-    def calc_c(self,b, m):
-        b0 = np.r_[0,b[:-1]]
-        b1 = b
-        e = self.abilities[:-1,m]
-        r, w, nvec = self.r, self.w, self.nvec   
-        c = (1+r)*b0 + nvec[:-1]*e*w-b1
+    def calc_c(self, b1, s, j, psi, b0):
+        e, r, w, nvec = self.e[j], self.r, self.w, self.nvec 
+        c = nvec[s]*e*w + (1+r)*b0 - b1
         c_mask = c<0.0
         c[c_mask] = 0.0
-        return c, c_mask
+        return c**(-sigma), c_mask
 
     
-    def calc_Ec1(self, b, m):
-        b0 = b
-        b1 = np.r_[b[1:],0]
-        pi = Pi[self.shocks[:-1,m]]
+    def calc_Ec1(self, b1, s, j, psi):
         r, w, nvec = self.r, self.w, self.nvec
-        Ec1 = (pi*(nvec[1:,None]*self.e*w+(1+r)*b0[:,None]-b1[:,None])).sum(1)
-        Ec1_mask = Ec1<0.0
-        Ec1[Ec1_mask] = 0.0
+        if psi==None:
+            b2 = np.zeros(101)
+        else:
+            b2 = psi(b1)
+        c1 = (nvec[s-1]*self.e*w+(1+r)*b1[:,None]-b2[:,None])
+        Ec1_mask = ((c1<0.0).sum(1)).astype("bool")
+        c1[Ec1_mask] = 0.0
+        c1 = c1**(-sigma)
+        Ec1 = (Pi[j]*c1).sum(1)
         return Ec1, Ec1_mask
 
 
-    def eul_err(self, b, m):
+    def eul_err(self, b1, s, j, psi, grid):
         beta, r = self.beta, self.r
-        Ec1, Ec1_mask = self.calc_Ec1(b, m)
-        c, c_mask = self.calc_c(b, m)
-        eul_err = beta*(1+r)*(Ec1)**(-sigma) - c**(-sigma)
+        Ec1, Ec1_mask = self.calc_Ec1(b1, s, j, psi)
+        c, c_mask = self.calc_c(b1, s, j, psi, grid)
+        eul_err = beta*(1+r)*(Ec1)-c
         eul_err[Ec1_mask] = 9999.
         eul_err[c_mask] = 9999.
         return eul_err
 
-
-    def solve_1_agent(self,m):
-        b0 = np.ones(self.S-1)*.1
-#         if m!=0:
-#             b0 = self.b_vec[1:,m-1]
-        b, info, ier, mesg = fsolve(self.eul_err, b0, args=(m), full_output=1)
-        return b, ier, mesg
-
-
-    def update(self):
-        """Update b_vec to the next period."""
-        for m in range(5):
-            self.b_vec[1:,m], ier, mesg = self.solve_1_agent(m)
-#             print mesg
-#             print self.b_vec[:,:3]
-            if ier!=1:
-                print "The fsolve didn't converge."
+    def update_polfun(self):
+        r, w, nvec, S = self.r, self.w, self.nvec, self.S
+#         e_max = np.max(self.e)
+#         bound = np.sum([(1+r)**i*w*nvec[S-1-i]*e_max for i in range(S)])
+#         print bound
+        bound = 2.
+        grid = np.linspace(0, bound, 101)
+        self.Psi = np.empty((self.S-1, self.J, 101))
+        psi = None
+        for j in range(self.J):
+            for s in range(self.S-2, -1, -1):
+                print s, j
+                guess = np.ones(101)*.001
+                self.Psi[s,j], info, ier, mesg = fsolve(self.eul_err, guess, args=(s,j,psi,grid), full_output=1) 
+                if ier!=1:
+                    print 'warning'
+                psi = UnivariateSpline(self.Psi[s,j], grid)
+    
+    
+    def update_bvec(self):
+        for s in range(1, self.S):
+            for j in range(self.J):
+                psi = UnivariateSpline(Psi[s, j])
+                mask = self.shocks[s]==j
+                self.b_vec[mask] = psi(self.b_vec[mask])
+        self.b_vec = np.roll(self.b_vec, axis=0)
+        
 
     def calc_ss(self, tol=1e-10, maxiter=100):
         self.set_state()
-        self.r, self.w = 2., .2
+        self.r, self.w = 1., .2
         diff = 1
         count = 0
         while diff>tol and count<maxiter:
@@ -170,7 +181,4 @@ rho = .5
 
 #calculation
 og = OG(household_params, firm_params)
-#og.update()
-#og.update()
 
-#og.plot()
