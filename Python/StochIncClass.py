@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import fsolve, brentq
+from scipy.optimize import fsolve
 from quantecon import markov
 from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
 import matplotlib.pyplot as plt
@@ -7,41 +7,40 @@ import matplotlib.pyplot as plt
 class OG(object):
     def __init__(self, household_params, firm_params):
         """Instantiate the state parameters of the OG model."""
+        # Make household parameters as attributes.
         (self.N, self.S, self.J, beta_annual, self.sigma,
          self.Pi, self.e) = household_params
-        
+        # Convert beta_annual to the beta for a period.
         self.beta = beta_annual**(80/self.S)
-
+        # Exogenous labor.
         n = np.ones(self.S)
         n[2*self.S/3:] = n[2*self.S/3:]*.3
         self.n = n
-        
+        # Create the markov chain object so we can simulate the shock paths.
         MC = markov.core.MarkovChain(self.Pi)
+        # Find the ergodic distribution.
         self.lambda_bar = MC.stationary_distributions
-        
+        # Determine the number of agents initially in each ability type.
         weights = (self.lambda_bar/(self.lambda_bar.min())*self.N).astype('int')
-        
         self.M = np.sum(weights)
-        
         initial_e = np.zeros(self.M)
         for weight in np.cumsum(weights[0][1:]):
             initial_e[weight:] += 1
-        
+        # Simulate M shock paths.
         self.shocks = MC.simulate(self.S, initial_e, random_state=1).T
         self.abilities = self.e[self.shocks]
-
+        # Set the firm parameters as attributes.
         (self.A, self.alpha, delta_annual) = firm_params
-        
+        # Convert delta_annual to the delta corresponding to the period length.
         self.delta = 1-(1-delta_annual)**(80/self.S)
-        
+        # Initialize the state.
         self.B = np.empty((self.S,self.M))
         self.B[0] = 0.0
-        
-        self.r, self.w = .3, .8
-        
-        self.grid_size = 1500
-        self.b0min = -self.w*(2+self.r)/(1+self.r)**2*np.min(self.e)*np.min(self.n)+1e-12
-        # print 'b0min', self.b0min
+        # Set initial guesses for r and w.
+        self.r, self.w = 0.312381791072, 0.637945371028
+        # Initialize
+        self.grid_size = 3500
+        self.b0min = -self.w*(2+self.r)/(1+self.r)**2*np.min(self.e)*np.min(self.n)+1e-5
         self.b0max = 1500
         self.Grid = np.empty((self.S, self.J, self.grid_size))
         for j in range(self.J):
@@ -49,11 +48,10 @@ class OG(object):
         self.Psi = np.empty((self.S, self.J, self.grid_size))
         self.Psi[-1] = 0.0
         
-    
+                
     def update_Psi(self):
         for s in range(self.S-2,-1,-1):
             for j in range(self.J):
-#                 print s, j
                 lb = -999
                 for j_ in range(self.J):
                     psi = UnivariateSpline(self.Grid[s+1,j_], self.Psi[s+1,j_])                
@@ -66,36 +64,26 @@ class OG(object):
                     lb = np.max([lb,lb_])
                     if ier!=1:
                         print s, j, j_, 'The lower bound wasn\'t calculated correctly.'
-                # print 'lower bound', lb
                 self.lb = lb
-                self.b0min = (lb-self.w*self.e[j]*self.n[s])/(1+self.r)+1e-12
-                # print 'b0min', self.b0min
+                self.b0min = (lb-self.w*self.e[j]*self.n[s])/(1+self.r)+1e-5
                 self.Grid[s,j] = np.linspace(self.b0min, self.b0max, self.grid_size)
                 ub = self.Grid[s,j]*(1+self.r)+self.w*self.e[j]*self.n[s]
                 self.ub = ub
-                # if not np.all(lb<ub):
-                    # print 'ub', ub
                 psi = UnivariateSpline(self.Grid[s+1,j], self.Psi[s+1,j])
+                print s, j, ub[0]-lb
                 for i in range(self.grid_size):
                     obj = lambda x: self.obj(x, self.Grid[s,j,i], psi, s, j, i)
-#                     if i%10==0:
-#                         print [obj(fish) for fish in np.linspace(lb, ub[i], 10)]
-                    self.Psi[s,j,i], info = brentq(obj, lb, ub[i], full_output=1)
-                    if not info.converged:
+                    self.Psi[s,j,i], info, ier, mesg = fsolve(obj, (lb+ub[i])/2., full_output=1)
+                    print obj()
+                    if ier!=1:
                         print s, j, i, 'no converge'
-
-                
-    
-#     def obj(self, b1, b0, psi, s, j):
-#         b2 = psi(b1)
-#         c0 = b0*(1+self.r)+self.w*self.e[j]*self.n[s]-b1
-#         c1 = b1[:,None]*(1+self.r)+self.w*self.e*self.n[s+1]-b2[:,None]
-#         err = c0**-self.sigma-self.beta*(1+self.r)*np.inner(self.Pi[j],c1**-self.sigma)
-#         return err
+                            
     
     def obj(self, b1, b0, psi, s, j, i):
-        if b1==self.lb:
-            return -np.inf
+        if b1<self.lb:
+            return -np.inf-np.abs(b1)
+        if b1>self.ub[i]:
+            return np.inf+np.abs(b1)
         b2 = psi(b1)
         c0 = b0*(1+self.r)+self.w*self.e[j]*self.n[s]-b1
         c1 = b1*(1+self.r)+self.w*self.e*self.n[s+1]-b2
@@ -118,9 +106,7 @@ class OG(object):
         self.r = self.alpha*self.A*((self.L/self.K)**(1-self.alpha))-self.delta
         self.w = (1-self.alpha)*self.A*((self.K/self.L)**self.alpha)
         
-        self.b0min = 0
-        self.b0min = -self.w*(2+self.r)/(1+self.r)**2*np.min(self.e)*np.min(self.n)+1e-12
-#         print 'b0min', self.b0min
+        self.b0min = -self.w*(2+self.r)/(1+self.r)**2*np.min(self.e)*np.min(self.n)+1e-5
         for j in range(self.J):
             self.Grid[-1,j] = np.linspace(self.b0min, self.b0max, self.grid_size)
 
@@ -158,4 +144,3 @@ delta_annual = .05
 firm_params = (A, alpha, delta_annual)
 
 og = OG(household_params, firm_params)
-og.calc_SS()
