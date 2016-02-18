@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import fsolve
+from scipy.optimize import fsolve, root
 from quantecon import markov
 from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
 import matplotlib.pyplot as plt
@@ -70,20 +70,30 @@ class OG(object):
                 ub = self.Grid[s,j]*(1+self.r)+self.w*self.e[j]*self.n[s]
                 self.ub = ub
                 psi = UnivariateSpline(self.Grid[s+1,j], self.Psi[s+1,j])
-                print s, j, ub[0]-lb
+                print s, j
                 for i in range(self.grid_size):
                     obj = lambda x: self.obj(x, self.Grid[s,j,i], psi, s, j, i)
-                    self.Psi[s,j,i], info, ier, mesg = fsolve(obj, (lb+ub[i])/2., full_output=1)
-                    print obj()
+                    jac = lambda x: self.jac(x, self.Grid[s,j,i], psi, s, j, i)
+                    sol = root(obj, (lb+ub[i])/2., jac=0)
+                    self.Psi[s,j,i], ier = sol.x, sol.success
+                    # self.Psi[s,j,i], info, ier, mesg = fsolve(obj, (lb+ub[i])/2., full_output=1)
                     if ier!=1:
                         print s, j, i, 'no converge'
-                            
+                        
+    def jac(self, b1, b0, psi, s, j, i):
+        if b1<self.lb:
+            return [0]
+        if b1>self.ub[i]:
+            return [0]
+        h = 1e-10
+        Dcen = (self.obj(b1+h, b0, psi, s, j, i)-self.obj(b1-h, b0, psi, s, j, i))/(2.*h)
+        return [Dcen]
     
     def obj(self, b1, b0, psi, s, j, i):
-        if b1<self.lb:
-            return -np.inf-np.abs(b1)
-        if b1>self.ub[i]:
-            return np.inf+np.abs(b1)
+#         if b1<self.lb:
+#             return np.inf*np.abs(b1)
+#         if b1>self.ub[i]:
+#             return np.inf*np.abs(b1)
         b2 = psi(b1)
         c0 = b0*(1+self.r)+self.w*self.e[j]*self.n[s]-b1
         c1 = b1*(1+self.r)+self.w*self.e*self.n[s+1]-b2
