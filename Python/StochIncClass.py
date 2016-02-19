@@ -37,7 +37,7 @@ class OG(object):
         self.B = np.empty((self.S,self.M))
         self.B[0] = 0.0
         # Set initial guesses for r and w.
-        self.r, self.w = 0.312381791072, 0.637945371028
+        self.r, self.w = 0.2, 0.8
         # Initialize
         self.grid_size = 3500
         self.b0min = -self.w*(2+self.r)/(1+self.r)**2*np.min(self.e)*np.min(self.n)+1e-5
@@ -74,7 +74,7 @@ class OG(object):
                 for i in range(self.grid_size):
                     obj = lambda x: self.obj(x, self.Grid[s,j,i], psi, s, j, i)
                     jac = lambda x: self.jac(x, self.Grid[s,j,i], psi, s, j, i)
-                    sol = root(obj, (lb+ub[i])/2., jac=0)
+                    sol = root(obj, (lb+ub[i])/2., jac=jac)
                     self.Psi[s,j,i], ier = sol.x, sol.success
                     # self.Psi[s,j,i], info, ier, mesg = fsolve(obj, (lb+ub[i])/2., full_output=1)
                     if ier!=1:
@@ -97,9 +97,8 @@ class OG(object):
         b2 = psi(b1)
         c0 = b0*(1+self.r)+self.w*self.e[j]*self.n[s]-b1
         c1 = b1*(1+self.r)+self.w*self.e*self.n[s+1]-b2
-        err = c0**-self.sigma-self.beta*(1+self.r)*np.sum(self.Pi[j]*(c1**-self.sigma))
-        return err
-
+        b_err = c0**-self.sigma-self.beta*(1+self.r)*np.sum(self.Pi[j]*(c1**-self.sigma))
+        return b_err
     
     def update_B(self):
         for s in range(self.S-1):
@@ -142,9 +141,13 @@ S = 80
 J = 2
 beta_annual = .96
 sigma = 3.0
-Pi = np.array([[0.4, 0.6],
-               [0.6, 0.4]])
-e = np.array([0.8, 1.2])
+Pi = np.array([[0.2, 0.8],
+                [0.3, 0.7]])
+e = np.array([.8, 1.2])
+#Pi = np.array([[0.2, 0.4, .4],
+#                [0.3, 0.6,.1],
+#               [0.6, 0.3, 0.1]])
+#e = np.array([0.8, 1., 1.2])
 
 household_params = (N, S, J, beta_annual, sigma, Pi, e)
 
