@@ -1,0 +1,6 @@
+06/07/2016 09:44:25 PM
+Total SS computation time: 9:27:24.503471
+Total Labor supply: 109007.31508                     
+Total Capital supply: 733391.556387                     
+Steady State interest rate: 0.0513783944568                     
+Steady State Wage: 1.26670070843                     
